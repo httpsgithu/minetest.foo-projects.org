@@ -3,14 +3,7 @@ function jsEscape(s)
 	return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
-function parseBoxEntry(str)
-{
-	var m = String(str).match(/^(\S+):\s+"?(.+?)"?\s+by\s+(.+)$/);
-	if (!m) return null;
-	return { id: m[1], name: m[2], builder: m[3] };
-}
-
-var boxRankings = { "": null, "_yearly": null, "_monthly": null };
+var boxScores = { "": null, "_yearly": null, "_monthly": null };
 var builderBoxes = {};
 
 function rebuildBuilderBoxes()
@@ -18,29 +11,31 @@ function rebuildBuilderBoxes()
 	builderBoxes = {};
 	var windows = { "": "alltime", "_yearly": "yearly", "_monthly": "monthly" };
 	Object.keys(windows).forEach(function(suffix) {
-		var tbl = boxRankings[suffix];
+		var tbl = boxScores[suffix];
 		if (!tbl) return;
-		Object.keys(tbl).forEach(function(rankStr) {
-			var entry = parseBoxEntry(tbl[rankStr]);
-			if (!entry) return;
-			if (!builderBoxes[entry.builder]) builderBoxes[entry.builder] = {};
-			if (!builderBoxes[entry.builder][entry.id]) {
-				builderBoxes[entry.builder][entry.id] = { id: entry.id, name: entry.name, ranks: {} };
+		Object.keys(tbl).forEach(function(bidStr) {
+			var entry = tbl[bidStr];
+			if (!entry || !entry.builder) return;
+			var b = entry.builder;
+			if (!builderBoxes[b]) builderBoxes[b] = {};
+			if (!builderBoxes[b][bidStr]) {
+				builderBoxes[b][bidStr] = { id: bidStr, name: entry.name, ranks: {}, totals: {} };
 			}
-			builderBoxes[entry.builder][entry.id].ranks[windows[suffix]] = parseInt(rankStr);
+			builderBoxes[b][bidStr].ranks[windows[suffix]] = entry.rank;
+			builderBoxes[b][bidStr].totals[windows[suffix]] = entry.total;
 		});
 	});
 }
 
-function loadAllBoxRankings()
+function loadAllBoxScores()
 {
 	["", "_yearly", "_monthly"].forEach(function(suffix) {
 		var r = new XMLHttpRequest();
-		r.open("GET", BASE + "top_boxes" + suffix + ".json", true);
+		r.open("GET", BASE + "box_scores" + suffix + ".json", true);
 		r.setRequestHeader("Content-type", "application/json");
 		r.onreadystatechange = function() {
 			if (r.readyState == 4 && r.status == 200) {
-				boxRankings[suffix] = JSON.parse(r.responseText);
+				boxScores[suffix] = JSON.parse(r.responseText);
 				rebuildBuilderBoxes();
 			}
 		};
@@ -55,7 +50,7 @@ function showBuilderBoxes(builder)
 	var content = document.getElementById('builder-modal-content');
 	var html = "<h3 style=\"margin-top:0;text-align:center;\">Boxes by " + builder + "</h3>";
 	if (!boxes || Object.keys(boxes).length === 0) {
-		html += "<p style=\"text-align:center;\">No ranked boxes for this builder.</p>";
+		html += "<p style=\"text-align:center;\">No boxes found for this builder.</p>";
 	} else {
 		var ids = Object.keys(boxes).sort(function(a, b) { return parseInt(a) - parseInt(b); });
 		html += "<table style=\"width: 80%;margin: 0 auto;\">";
@@ -65,9 +60,9 @@ function showBuilderBoxes(builder)
 			html += "<tr>";
 			html += "<td>" + b.id + "</td>";
 			html += "<td>" + getbox(b.id, b.name, builder) + "</td>";
-			html += "<td>" + (b.ranks.alltime ? "#" + b.ranks.alltime : "&mdash;") + "</td>";
-			html += "<td>" + (b.ranks.yearly ? "#" + b.ranks.yearly : "&mdash;") + "</td>";
-			html += "<td>" + (b.ranks.monthly ? "#" + b.ranks.monthly : "&mdash;") + "</td>";
+			html += "<td>" + (b.ranks.alltime ? "#" + b.ranks.alltime + " / " + b.totals.alltime : "&mdash;") + "</td>";
+			html += "<td>" + (b.ranks.yearly ? "#" + b.ranks.yearly + " / " + b.totals.yearly : "&mdash;") + "</td>";
+			html += "<td>" + (b.ranks.monthly ? "#" + b.ranks.monthly + " / " + b.totals.monthly : "&mdash;") + "</td>";
 			html += "</tr>\n";
 		});
 		html += "</table>\n";
@@ -165,7 +160,7 @@ function loadRankings(suffix) {
 }
 
 loadRankings("");
-loadAllBoxRankings();
+loadAllBoxScores();
 
 (function() {
 	var closeEl = document.getElementById('builder-modal-close');
